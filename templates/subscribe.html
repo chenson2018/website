@@ -1,0 +1,24 @@
+{% extends "header.html" %}
+
+{% block heading %}Subscribe{% end %}
+
+{% block body %}
+
+    {% if post %}
+      <p>
+      You have been added to the email subscription list.
+      </p>
+    {% else %}
+      <p>
+      Please enter your email below to subscribe. I will send out update emails that include any new articles that have been added. <a href="./unsubscribe">Click here to unsubscribe</a>
+      </p>
+      
+      <form action="./subscribe" method="post">
+        <input type="text" id="email" name="email" required><br><br>
+        <input type="submit" value="Subscribe">
+      </form>
+    {% end %}
+
+{% end %}
+
+

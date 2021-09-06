@@ -1,0 +1,24 @@
+{% extends "header.html" %}
+
+{% block heading %}UnSubscribe{% end %}
+
+{% block body %}
+
+    {% if post %}
+      <p>
+      You have been removed from the email subscription list.
+      </p>
+    {% else %}
+      <p>
+      Please enter your email below to unsubscribe.
+      </p>
+      
+      <form action="./unsubscribe" method="post">
+        <input type="text" id="email" name="email" required><br><br>
+        <input type="submit" value="Subscribe">
+      </form>
+    {% end %}
+
+{% end %}
+
+

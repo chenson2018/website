@@ -1,0 +1,15 @@
+{% extends "header.html" %}
+
+{% block heading %}Articles{% end %}
+
+{% block body %}
+
+    <p style="text-align: left;">
+    {% for article in articles %}
+	{% if article['published'] %}
+            {{ article['publish_date'] }}: <a href="./article/{{ article['filename'] }}">{{ article['title'] }}</a><br>
+	{% end %}
+    {% end %}
+    </p>
+
+{% end %}

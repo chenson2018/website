@@ -1,0 +1,53 @@
+<!--BEGIN BODY-->
+<p>
+Just something small for my first entry here. You might be wondering "how are you going to effectively display equations on your website?"
+</p>
+
+<p>
+The mathematics notation is pretty painless, provided you're already familiar with LaTeX. In the header of this page I have the following:
+</p>
+
+
+<pre class="prettyprint">
+<code>
+&lt;script type="text/x-mathjax-config"&gt;
+  MathJax.Hub.Config({
+    tex2jax: {
+      inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+      processEscapes: true
+    }
+  });
+&lt;/script&gt;
+    
+&lt;script type="text/javascript"
+        src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"&gt;
+&lt;/script&gt;
+
+</code>
+</pre>
+
+which imports the JavaScript engine <a href="https://www.mathjax.org/" target="blank">MathJax</a> and allows me to natively use LaTeX in my HTML. So I can simply type:
+
+<pre class="prettyprint">
+<code>
+$$ \sum _{n=1}^{\infty } \frac {1}{n^{2}} =\frac {1}{1^{2}} +
+                                           \frac {1}{2^{2}} +
+                                           \frac {1}{3^{2}} +
+                                           \cdots $$
+</code>
+</pre>
+
+which is rendered as:
+
+$$ \sum _{n=1}^{\infty } \frac {1}{n^{2}} =\frac {1}{1^{2}} + 
+					   \frac {1}{2^{2}} + 
+				           \frac {1}{3^{2}} +
+					   \cdots $$
+
+<p>
+Check out the page source (Ctrl+U in chrome) and you'll see that the above equation comes from the exact same code. 
+</p>
+
+<p>
+If you've never seen that equation before, this is the <a href="https://en.wikipedia.org/wiki/Basel_problem" target="blank">Basel problem</a>, which will likely be the subject of a future post. 
+</p>

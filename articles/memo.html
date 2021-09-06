@@ -1,0 +1,590 @@
+<p>
+What is memoization? Simply put, memoization is the process of designing a program to store intermediate results to make it more efficient. Especially
+in a situation where we have a recursive function or where costly computations would need to be repeated several times, memoization can greatly speed
+up our calculations. Here I will outline this process in Python using the Fibonacci and Collatz sequences as examples.
+</p>
+
+<div class='heading'>The Fibonacci sequence - A naive implementation</div><hr/>
+<p>
+The Fibonacci sequence is easy to describe in words. We start with the initial values 0 and 1, then each successive term is calculated by adding the last two terms. We have:
+</p>
+
+<p>
+\begin{align}
+F_0 &= 0\\
+F_1 &= 1\\
+F_n &= F_{n-1} + F_{n-2}
+\end{align}
+</p>
+
+<p>
+The first few terms of the sequence are:
+
+$$
+0,\;1,\;1,\;2,\;3,\;5,\;8,\;13,\;21,\;34,\;55,\;89,\;144,\; \ldots
+$$
+</p>
+
+<p>
+We can easily see the recursive nature of this sequence. We have $0+1=1$, $1+1=2$, $1+2=3$, $2+3=5$, $\dots$, with this pattern continued indefinitely. We can easily define this function in Python:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+def fib(n):
+    if n == 0:
+        return 0
+    elif n == 1:
+        return 1
+    else:
+        return fib(n-1) + fib(n-2)
+</pre>
+</code>
+</p>
+
+<p>
+Let's take a look at the performance of the function by calculating the first fifty terms in the sequence and recording the times for each function call:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+from time import time  
+
+times = []
+
+for n in range(50):
+    start = time()
+    fib(n)    
+    stop = time()
+    duration = stop-start
+    times.append((n, duration))
+</pre>
+</code>
+</p>
+
+<p>
+Looking at a graph of these times:
+</p>
+
+<p>
+<img border="0" alt="fib times" src="../static/article_files/memo/fib_time.png" width="500">
+</p>
+
+<p>
+What's going on here? We're just adding numbers, something that shouldn't be that expensive of an operation, but our execution times are huge and seeing what looks like exponential increase.
+In total this took over an hour to run on my desktop!
+</p>
+
+<p>
+The problem is with the way that we have defined our function. By directly utilizing the recursion of the Fibonacci sequence in a function call, we have inadvertently made many more calculations than
+are needed. For instance, let's think about what is happening when we call <code class = "prettyprint">fibs(5)</code>. Python does the following calculations, where each line roughly represents a step in the recursion:
+</p>
+
+</p>
+\begin{align}
+\text{fibs}(5) &= \text{fibs}(4) + \text{fibs}(3)\\
+           &= \text{fibs}(3) + \text{fibs}(2) + \text{fibs}(2) + \text{fibs}(1)\\ 
+           &= \text{fibs}(2) + \text{fibs}(1) + \text{fibs}(1) + \text{fibs}(0) + \text{fibs}(1) + \text{fibs}(0) + 1\\
+           &= \text{fibs}(1) + \text{fibs}(0) + 1 + 1 + 0 + 1 + 0 + 1\\
+           &= 1 + 0 + 1 + 1 + 0 + 1 + 0 + 1 \\
+           &= 5
+\end{align}
+</p>
+
+<p>
+Look at how many calls we are making to the function! Even for such a low index, we call the function a dozen times. 
+It is clear that we are not making an efficient use of this sequence's properties. There are multiple instances of the same value being recalculated in a single
+call of the function. None of the function calls actually evaluate to an integer except <code class = "prettyprint">fibs(0)</code>
+and <code class = "prettyprint">fibs(1)</code>,
+and even these are called redundantly. More than that, this process starts all over when we need to calculate <code class = "prettyprint">fibs(6)</code>.
+</p>
+
+<div class='heading'>The Fibonacci sequence - using Memoization</div><hr/>
+
+<p>
+What we need is a clean way to implement a dictionary that records all intermediate calls of the function so that each index of the sequence is
+calculated exactly once, and any future calls use this dictionary.
+</p>
+
+<p>
+Here is where we can implement memoization. Surprisingly, we are going to be able to use the same function but will be altering it into a class that has access to a dictionary of previously calculated values. We start by defining the following class:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+class Memoize:
+    def __init__(self, fn):
+        self.fn = fn
+        self.memo = {}
+
+    def __call__(self, *args):
+        if args not in self.memo:
+            self.memo[args] = self.fn(*args)
+        return self.memo[args]
+</pre>
+</code>
+</p>
+
+<p>
+Let's break down what's happening. The method <code class = "prettyprint">__init__</code> initializes the class by
+</p>
+
+<p style="margin-left:5%; margin-right:10%;">
+- storing the passed function as <code class = "prettyprint">self.fn</code><br>
+- creating the dictionary <code class = "prettyprint">self.memo</code>
+</p>
+
+<p>
+The method <code class = "prettyprint">__call__</code> is executed when the instance is called and checks if <code class = "prettyprint">self.memo</code> contains the function arguments then:
+</p>
+
+<p style="margin-left:5%; margin-right:10%;">
+- if it does, we can simply return the value from the dictionary<br>
+- if not, the function is evaluated and added to the dictionary for future use
+</p>
+
+</p>
+To initialize this class with the function fib we do the following:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+@Memoize
+def fib(n):
+    if n == 0:
+        return 0
+    elif n == 1:
+        return 1
+    else:
+        return fib(n-1) + fib(n-2)
+</pre>
+</code>
+</p>
+
+<p>
+Here <code class = "prettyprint">@Memoize</code> is a <a href="https://www.python.org/dev/peps/pep-0318/" target="blank">decorator</a>. This is simply a shorter way of writing <code class = "prettyprint">fib = Memoize(fib)</code>
+to replace our original function with the new class. Now how will <code class = "prettyprint">fibs(5)</code> perform as compared to above? If <code class = "prettyprint">fibs(4)</code> and <code class = "prettyprint">fibs(3)</code> are in
+<code class = "prettyprint">self.memo</code> it would be a single line!
+</p>
+
+</p>
+For instance, after evaluating <code class = "prettyprint">fibs(4)</code> we can see that <code class = "prettyprint">self.memo</code> contains:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+{(1,): 1, (0,): 0, (2,): 1, (3,): 2, (4,): 3}
+</pre>
+</code>
+</p>
+
+<p>
+so that if <code class = "prettyprint">fibs(5)</code> is called, the function will lookup <code class = "prettyprint">fibs(4)</code> and <code class = "prettyprint">fibs(3)</code> in
+<code class = "prettyprint">self.memo</code> instead of the longer calculation shown earlier.
+</p>
+
+<p>
+The performance benefit is astounding. Using <a href="https://docs.python.org/2/library/timeit.html" target="blank">timeit</a> to measure our new function, we can produce
+the first 100,000 Fibonacci numbers with average time:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+%%timeit
+@Memoize
+def fib(n):
+    if n == 0:
+        return 0
+    elif n == 1:
+        return 1
+    else:
+        return fib(n-1) + fib(n-2)
+
+times = []
+
+for n in range(100000):
+    start = time()
+    fib(n)    
+    stop = time()
+    duration = stop-start
+    times.append((n, duration))
+</pre>
+</code>
+</p>
+
+<p>Output:</p>
+
+<p>
+<code>
+<pre>
+291 ms &plusmn; 7.94 ms per loop (mean  std. dev. of 7 runs, 1 loop each)
+</pre>
+</code>
+</p>
+
+<p>
+(Please note that I am using Jupyter, the %% is a <a href="https://ipython.readthedocs.io/en/stable/interactive/magics.html#built-in-magic-commands" target="blank">built-in magic command</a>) 
+</p>
+
+<p>
+We can make this faster, but I'll save that discussion for a future post as it is more related to mathematical rather than memory manipulation.
+</p>
+
+<p>
+One last note that these numbers are huge, with the last number $F_{99,999} \approx 1.60528 \times 10^{20898}$ being over 20,000 digits long! I tried to compute up to
+the one-millionth Fibonacci but my computer became unresponsive.
+</p>
+
+<div class='heading'>Lengths of Collatz Sequences</div><hr/>
+
+<p>
+Now that we have a bit of a feel for things, let's look at a slightly more complex sequence. Consider the following function:
+</p>
+
+<p>
+$$
+f(n) = \begin{cases} \frac{n}{2} &\text{if } n \equiv 0 \pmod{2}\\[4px] 3n+1 & \text{if } n\equiv 1 \pmod{2} .\end{cases}
+$$
+</p>
+
+<p>
+We use this function to create a sequence by continually applying $f$ until we reach a value of 1 (which causes a loop back to 1). For instance, we have:
+</p>
+
+<p>
+$$
+13 \rightarrow  40 \rightarrow 20 \rightarrow 10 \rightarrow 5 \rightarrow 16 \rightarrow 8 \rightarrow 4  \rightarrow 2 \rightarrow 1
+$$
+</p>
+
+<p>
+The Collatz Conjecture is the statement that any initial starting value creates a sequence that will end at 1. Despite the apparent simplicity of its statement, this problem is considered one of the great open problems in mathematics,
+with even the great mathematician Erdo&#779;s being quoted as saying: <i>"Mathematics is not yet ripe enough for such questions."</i>
+</p>
+
+<p>
+Nevertheless, it is easy to define the sequence in Python. Following Project Euler's <a href="https://projecteuler.net/problem=14" target="blank">problem 14</a>,
+consider the following question: Which starting number, under one million, produces the longest sequence?
+</p>
+
+I can define the following two functions:
+
+<p>
+<code>
+<pre class = "prettyprint">
+def collatz(n):
+    if n == 1:
+        return 1
+    elif n % 2 == 0:
+        return n//2
+    else:
+        return 3*n + 1
+    
+def collatz_sequence(n):
+    sequence = [n]
+    
+    while 1 not in sequence:
+        n = collatz(n)
+        sequence.append(n)
+        
+    return len(sequence)
+</pre>
+</code>
+</p>
+
+and brute force the solution:
+
+<p>
+<code>
+<pre class = "prettyprint">
+lengths  = [collatz_sequence(n) for n in range(1, 1000000)]
+solution = lengths.index(max(lengths))
+</pre>
+</code>
+</p>
+
+<p>
+This takes approximately a minute and a half on my desktop, returning that the longest chain for initial values under one million begins at 837799 and produces a sequence of 525 numbers.
+This isn't bad, but we can do better (even without thinking about the math more) by using memoization. 
+</p>
+
+<div class='heading'>Lengths of Collatz Sequences Using Memoization</div><hr/>
+
+<p>
+This is a little harder to mentally visualize, so let's take a look at a diagram, which shows all sequences with length less than 20:
+</p>
+
+<p><a href="https://commons.wikimedia.org/wiki/File:All_Collatz_sequences_of_a_length_inferior_to_20.svg#/media/File:All_Collatz_sequences_of_a_length_inferior_to_20.svg" target="blank">
+<img src="https://upload.wikimedia.org/wikipedia/commons/f/f1/All_Collatz_sequences_of_a_length_inferior_to_20.svg" alt="All Collatz sequences of a length inferior to 20.svg" width="900"></a><br>
+
+<p>
+One thing we can notice is that there is a lot of repetition in our sequences, as they form large "branches" that split off at various points. For instance, every sequence in the diagram includes the subsequence
+
+$$
+16 \rightarrow 8 \rightarrow 4  \rightarrow 2 \rightarrow 1
+$$
+</p>
+
+<p>
+So imagine for a moment that I have already evaluated <code class = "prettyprint">collatz_sequence(16)</code> and seen that it has length 5. Then if I were evaluating <code class = "prettyprint">collatz_sequence(32)</code>
+or <code class = "prettyprint">collatz_sequence(5)</code>, the starting points that have 16 as their next step, I know that the length will evaluate to $1+5=6$, saving me several addition and subtraction operations. This is a perfect oppurtunity for memoization.
+</p> 
+
+<p>
+I can leave the <code class = "prettyprint">collatz</code> function as it is, but will need to slightly alter the memoization class and the function that computes the sequence length.
+I actually can simplify the memoization class to:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+class Memoize:
+    def __init__(self, fn):
+        self.fn = fn
+        self.memo = {}
+
+    def __call__(self, *args):
+        self.fn(*args, self.memo)
+</pre>
+</code>
+</p>
+
+<p>
+Notice that instead of the <code class = "prettyprint">__call__</code> method checking <code class = "prettyprint">self.memo</code> it just passes the dictionary as an arguement to our function. For this problem,
+I just felt it was easier to rewrite the function with the memoization dictionary as an arguement.
+So I will now make the sequence function:
+</p>
+
+<p>
+<code>
+<pre class="prettyprint linenums">
+@Memoize
+def collatz_sequence(n, cache):
+    if n == 1:
+        cache[n] = 1
+        return 1
+    
+    copy = n
+    sequence = [n]
+    
+    while 1 not in sequence:
+        n = collatz(n)
+        if n in cache:
+            cache[copy] = len(sequence) + cache[n]
+            break
+        else:
+            sequence.append(n)
+</pre>
+</code>
+</p>
+
+<p>
+Let's break down what's happening. First in lines 2 through 8:
+</p>
+
+<p style="margin-left:5%; margin-right:10%;">
+- If the initial value is 1, we add the key-value pair 1:1 to <code class = "prettyprint">self.memo</code><br>
+- We make a copy of the inital number for later use with <code class = "prettyprint">self.memo</code><br>
+- Initialize the list that will hold our Collatz sequence
+</p>
+
+<p>
+Then in the while loop:
+</p>
+
+<p style="margin-left:5%; margin-right:10%;">
+- We continue so long as our sequence has not reached 1<br>
+- We calculate the next value of the Collatz sequence<br>
+- If the next value is in <code class = "prettyprint">self.memo</code> we know that this is the remaining length<br>
+- If the next value is <i>not</i> in <code class = "prettyprint">self.memo</code> we continue by appending to the sequence<br>
+</p>
+
+<p>
+Note that this class is meant to be called in numerical order to take advantage of the memotization. As an example, if we compute the length of the first 13 sequences with:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+for n in range(1, 14):
+    collatz_sequence(n)
+</pre>
+</code>
+</p>
+
+<p>
+then collatz_sequence.memo will contain:
+</p>
+
+<p>
+<code>
+<pre>
+{1: 1, 2: 2, 3: 8, 4: 3, 5: 6, 6: 9, 7: 17, 8: 4, 9: 20, 10: 7, 11: 15, 12: 10, 13: 10}
+</pre>
+</code>
+</p>
+
+<p>
+The performance greatly improves. Computing the lengths and sequences with an initial value less than one million and again measuring with timeit:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+%%timeit
+@Memoize
+def collatz_sequence(n, cache):
+    if n == 1:
+        cache[n] = 1
+        return 1
+    
+    copy = n
+    sequence = [n]
+    
+    while 1 not in sequence:
+        n = collatz(n)
+        if n in cache:
+            cache[copy] = len(sequence) + cache[n]
+            break
+        else:
+            sequence.append(n)
+        
+    return len(sequence)
+
+for n in range(1, 1000000):
+    collatz_sequence(n)
+</pre>
+</code>
+</p>
+
+<p>Output:</p>
+
+<p>
+<code>
+<pre>
+2.53 s &plusmn; 22.5 ms per loop (mean  std. dev. of 7 runs, 1 loop each)
+</pre>
+</code>
+</p>
+
+<div class='heading'>A Small Improvement</div><hr/>
+
+<p>
+However, we can easily make a small change that will give just a bit more improvement. Look at the dictionary above. What is it missing? We calculated through the sequence starting with 13, but we didn't add
+any of these intermediate values to our dictionary! We can add a loop to capture these as well:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+@Memoize
+def collatz_sequence(n, cache):
+    if n == 1:
+        cache[n] = 1
+        return 1
+    
+    copy = n
+    sequence = [n]
+    
+    while 1 not in sequence:
+        n = collatz(n)
+        if n in cache:
+            cache[copy] = len(sequence) + cache[n]
+            break
+        else:
+            sequence.append(n)
+
+    for index, value in enumerate(sequence[::-1]):
+        cache[value] = cache[n] + index + 1
+</pre>
+</code>
+</p>
+
+<p>
+Now if we run the first 13 sequences again, <code class = "prettyprint">self.memo</code> will contain:
+</p>
+
+<p>
+<code>
+<pre>
+{1: 1, 2: 2, 3: 8, 4: 3, 8: 4, 16: 5, 5: 6, 10: 7, 6: 9, 7: 17, 20: 8, 40: 9, 13: 10, 26: 11, 52: 12, 17: 13, 34: 14, 11: 15, 22: 16, 9: 20, 14: 18, 28: 19, 12: 10}
+</pre>
+</code>
+</p>
+
+<p>
+We can visualize the change that we have made to the function by looking at the below graph, which is just a piece of the larger graph above. 
+I have included all sequences that are generated from initial values 1 through 13. I have colored the initial values in blue and all other included numbers in red. Our first version
+failed to account for these additional numbers that appear in the sequence but are outside our range of initial values. We can see that in this particular case that we can store nearly
+twice as many values for future use.
+</p>
+
+<p>
+<img border="0" alt="collatz_small" src="../static/article_files/memo/small_collatz_2.png" width="900">
+</p>
+
+<p>
+Finally, we can run this new version for initial values of less than one million and use timeit again:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+%%timeit
+@Memoize
+def collatz_sequence(n, cache):
+    if n == 1:
+        cache[n] = 1
+        return 1
+    
+    copy = n
+    sequence = [n]
+    
+    while 1 not in sequence:
+        n = collatz(n)
+        if n in cache:
+            cache[copy] = len(sequence) + cache[n]
+            break
+        else:
+            sequence.append(n)
+
+    for index, value in enumerate(sequence[::-1]):
+        cache[value] = cache[n] + index + 1
+
+for n in range(1, 1000000):
+    collatz_sequence(n)
+</pre>
+</code>
+</p>
+
+<p>Output:</p>
+
+<p>
+<code>
+<pre>
+1.99 s &plusmn; 43 ms per loop (mean  std. dev. of 7 runs, 1 loop each)
+</pre>
+</code>
+</p>
+
+<div class='heading'>Conclusion</div><hr/>
+
+<p>
+As we have seen, the use of memoization can have a drastic effect on the performance of a program. At its heart, all of these optimizations revolve around
+understanding and exploiting the structure of a particular problem with the use of an appropriate data structure that reduces
+repeating calculations when at all possible. 
+</p>
+<p>
+As we will see in a later post, this same idea of exploiting structure has vast generalizations that
+allow us the work with general mathematical frameworks and translate these into data structures that take advantage of the common structure
+between seemingly disparate problems.
+</p>
+<p>
+Code used in this article can be found <a href="https://github.com/chenson2018/website-code/tree/master/Memoization%20with%20Fibonacci%20and%20Collatz%20Sequences" target="blank">here</a>.
+</p>

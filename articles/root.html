@@ -1,0 +1,373 @@
+<p>
+Let's consider the following seemingly simple problem. Given a number $x$, calculate its inverse (reciprocal) square root $\frac{1}{\sqrt{x}}$. 
+This is a very practical problem in finding a normal vector for use in graphics calculations. 
+Definitely not a hard math problem, right?
+As a computation problem, however, there is some subtlety involved. 
+</p>
+
+<p>
+Nowadays doing such floating-point operations is inexpensive, especially with compiler optimizations that will 
+result in the x86 instruction <a href = "https://www.felixcloutier.com/x86/rsqrtss" target="blank">rsqrtss</a>. Back in the late 1990s however, quickly calculating
+such an expression, especially if the calculation was needed very often, represented a real issue. At the time, the accepted methods drew on lookup tables constructed to allow the computation of inverse square roots. 
+</p>
+
+<p>
+In the 
+<a href="https://github.com/id-Software/Quake-III-Arena/blob/master/code/game/q_math.c#L552" target="blank">source code of the game Quake III</a> a very different approach is found that 
+uses a mysterious approximation method. 
+Here is the code (written in C), along with the original colorful comments:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint linenums">
+float Q_rsqrt( float number )
+{
+    long i;
+    float x2, y;
+    const float threehalfs = 1.5F;
+
+    x2 = number * 0.5F;
+    y  = number;
+    i  = * ( long * ) &y;                       // evil floating point bit level hacking
+    i  = 0x5f3759df - ( i >> 1 );               // what the fuck?
+    y  = * ( float * ) &i;
+    y  = y * ( threehalfs - ( x2 * y * y ) );   // 1st iteration
+//  y  = y * ( threehalfs - ( x2 * y * y ) );   // 2nd iteration, this can be removed
+    
+    return y;
+}
+</pre>
+</code>
+</p>
+
+<p>
+What is going on here? The constant <code class = "prettyprint">0x5f3759df</code> seems to come from
+nowhere, there's a bit operation for some reason, and there is some mysterious switching of types going on back and forth between <code class = "prettyprint">float</code> 
+and <code class = "prettyprint">long</code>. Let's start to pick this code apart to understand what is happening.
+</p>
+
+<div class='heading'>32-Bit Floating-Point Format</div><hr/>
+
+<p>
+A crucial step in this algorithm is line 9 (evil floating point bit level hacking) where we convert our given floating-point number into <code class = "prettyprint">long</code>, an integer data type. 
+What exactly does this mean? For every floating-point number $x$, we can rewrite it as a normalized binary number so that:
+</p>
+
+<p>
+$$
+x = \pm 2^{e_x} (1 + m_x)
+$$
+</p>
+
+<p>
+where $e_x$ is an integer and $m_x \in [0, 1)$. Note the similarity to scientific notation, all that we have done is use base 2 instead. 
+To represent this as a 32-bit binary number, we alter these values with certain constants:
+</p>
+
+<p>
+\begin{align}
+S_x &= \left\{\begin{array}{lr}
+        0, & \text{for } x > 0 \\
+        1, & \text{for } x < 0 \\
+        \end{array}\right\}\\
+E_x &= e_x + B, \quad B = 127\\
+M_x &= m_x \times L, \quad L = 2^{23}
+\end{align}
+</p>
+
+<p>
+We are simply adding these constants to store our values. As an example, we would represent the floating point number $0.15625 = 2^{-3} \times 1.25$ as:
+</p>
+
+<p>
+<a href="https://commons.wikimedia.org/wiki/File:Float_example.svg#/media/File:Float_example.svg"><img src="https://upload.wikimedia.org/wikipedia/commons/d/d2/Float_example.svg" style="background-color:white; alt="Float example.svg" height="75" width="590"></a></p>
+
+since we have:
+
+<p>
+\begin{align}
+S_x &= 0\\
+E_x &= -3 + 127 = 124 = \text{0111 1100}_2\\
+M_x &= 0.25 \times 2^{23} = \text{010 0000 0000 0000 0000 0000}_2
+\end{align}
+</p>
+
+<p>
+Note that the part following the exponent $M_x$ is referred to as the mantissa.
+</p>
+
+<p>
+This conversion is exactly what is happening in line 9 with <code class = "prettyprint">i  = * ( long * ) &y;</code>, where we store this binary representation. Since we have concatenated these values, we have
+that this binary integer representation is equal to:
+</p>
+
+<p>
+$$
+I_x = E_x L + M_x
+$$
+</p>
+
+<p>
+since in concatenating we shifted $E_x$ 23 bits and added $M_x$.
+</p>
+
+<div class='heading'>A Logarithmic Approximation</div><hr/>
+
+<p>
+First, note that since we are taking square roots, we can assume that our value $x$ is positive. Since we have our number in a format that is multiplied by a power of two, we can do the following:
+</p>
+
+<p>
+\begin{align}
+\log_2(x) &= \log_2(2^{e_x} (1 + m_x))\\
+&= \log_2(2^{e_x}) + \log_2(1 + m_x)\\
+&= e_x + \log_2(1 + m_x)
+\end{align}
+</p>
+
+<p>
+Let's find a series expansion for the remaining logarithm. Recall the geometric series:
+</p>
+
+<p>
+$$
+\frac{1}{1+t} = 1 - t + t^2 - t^3 + \dots
+$$
+</p>
+
+<p>
+but we also have that:
+</p>
+
+<p>
+$$
+\ln(1+x) = \int_0^\infty \frac{1}{1+t} \, \mathrm{d}t
+$$
+</p>
+
+<p>
+so that integrating term by term gives:
+</p>
+
+<p>
+\begin{align}
+\ln(1+x) &= x - \frac{x^2}{2} + \frac{x^3}{3} - \frac{x^4}{4} + \dots\\
+         &= x + O(x^2)   
+\end{align}
+</p>
+
+<p>
+So we can approximate $\log_2(1 + m_x) \approx m_x + \sigma$, where $\sigma$ is a constant that we will use to serve as a correction for the $O(x^2)$ term. Together we have the approximation:
+</p>
+
+<p>
+$$
+\log_2(x) \approx e_x + m_x + \sigma
+$$
+</p>
+
+<p>
+Using this approximation, we can rewrite the 32-bit representation that we found above:
+</p>
+
+<p>
+\begin{align}
+I_x &= E_x L + M_x\\
+&= (e_x + B)L + (m_x \times L)\\
+&= L(e_x + B + m_x)\\
+&= L(e_x + m_x + \sigma + B - \sigma)\\
+&= L(e_x + m_x + \sigma) + L(B - \sigma)\\
+&\approx L \log_2(x) + L(B - \sigma)
+\end{align}
+</p>
+
+<p>
+so that 
+</p>
+
+<p>
+$$
+\log_2(x) \approx \frac{I_x}{L} - (B - \sigma)
+$$
+</p>
+
+<p>
+So getting back to the original problem, let $y = \frac{1}{\sqrt{x}}$. Then we have:
+</p>
+
+<p>
+\begin{align}
+\log_2(y) &= \log_2\left( \frac{1}{\sqrt{x}} \right)  \\
+          &= -\frac{1}{2} \log_2(x)\\
+\frac{I_y}{L} - (B - \sigma) & \approx -\frac{1}{2} \left( \frac{I_x}{L} - (B - \sigma) \right)\\
+\frac{I_y}{L} & \approx  \frac{1}{2}(B - \sigma) + (B - \sigma) - \frac{1}{2} \frac{I_x}{L}\\
+I_y & \approx  \frac{3}{2} L (B - \sigma) - \frac{1}{2} I_x
+\end{align}
+</p>
+
+<p>
+Taking <code class = "prettyprint">0x5f3759df</code> $= \frac{3}{2} L (B - \sigma)$, this is exactly line 10 with <code class = "prettyprint">i  = 0x5f3759df - ( i >> 1 );</code>
+</p>
+
+
+<div class='heading'>Newton's Method</div><hr/>
+
+<p>
+All of the above gave us an approximation for the value $y = \frac{1}{\sqrt{x}}$. The final step is to refine this initial guess using Newton's method, which allows us to use derivatives to approximate
+the roots of an equation. Suppose that we have a function $f(y)$ and we start with an initial guess $y_0$ as a root of our equation. 
+</p>
+
+<p>
+Letting our root be $r = y_0 + h$ for some small $h$, we can use the derivative as a linear approximation and have:
+</p>
+
+<p>
+\begin{align}
+0 &= f(y_0 + h) \\
+&\approx f(y_0) + h f'(y_0)\\
+h &\approx - \frac{f(y_0)}{f'(y_0)}\\
+y_0 + h &\approx y_0 - \frac{f(y_0)}{f'(y_0)}
+\end{align}
+</p>
+
+<p>
+In the context of finding the reciprocal square root of $x$ we have the equation:
+</p>
+
+<p>
+$$
+0 = f(y) = \frac{1}{y^2} - x
+$$
+</p>
+
+Using the initial guess $y_0 = \frac{3}{2} L (B - \sigma) - \frac{1}{2} I_x$ interpreted as a floating-point number, we have the approximation:
+
+<p>
+\begin{align}
+y_0 + h &\approx y_0 - \frac{f(y_0)}{f'(y_0)}\\
+y_0 + h &\approx y_0 - \frac{\frac{1}{y_0^2} - x}{-\frac{2}{y_0^3}}\\
+y_0 + h &\approx y_0 + \left(\frac{1}{y_0^2} - x\right)\frac{y_0^3}{2}\\
+y_0 + h &\approx y_0 + \frac{y_0}{2} - x\frac{y_0^3}{2}\\
+y_0 + h &\approx \frac{3}{2}y_0 - x\frac{y_0^3}{2}\\
+y_0 + h &\approx y_0\left(\frac{3}{2} - x\frac{y_0^2}{2}\right)
+\end{align}
+</p>
+
+<p>
+which corresponds to line 12: <code class = "prettyprint">y  = y * ( threehalfs - ( x2 * y * y ) );</code>
+<p>
+
+<div class='heading'>Selecting an Optimal Constant $\sigma$</div><hr/>
+
+<p>
+Note that at this point that we haven't derived our constant $\sigma$ which gives the constant used in the function. How should we do so? One interesting thing to consider is that there are only a finite amount of floats, so we can test them all. 
+</p>
+
+<p>
+I found <a href="https://cs.uwaterloo.ca/~m32rober/rsqrt.pdf" target="blank">this paper</a> which does exactly that, writing a function that checks all positive floats as our constant. 
+I highly suggest giving it a read, it is an amazing thesis that gives a clear and complete account of the entire algorithm. I will give a brief account but suggest you simply read straight from the source. 
+</p>
+
+<p>
+First, the author shows how <code class = "prettyprint">i  = 0x5f3759df - ( i >> 1 );</code> can be rewriiten in terms of the mantissa and exponent of i, with three cases corresponding to odd exponents, small even exponents, and
+large even exponents. Here small/large is defined by if underflow is caused in the subtraction. The code is as follows, testing the author's derivation against every possible floating-point number:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+#define S 190
+#define T 3627487
+
+int G(int w) {
+    int E = (w >> 23) & 0xff; // extract E field
+    int M = w & 0x7fffff; // extract M field
+
+    int a, b; // the fields of the return float
+
+    if ((E & 1) == 1) { // E Odd
+        a = S - 1 - (E>>1);
+        b = (1<<23) + T - (1<<22) - (M>>1);
+    } else if ((M>>1) <= T) { // E Even M Small
+        a = S - (E>>1);
+        b = T - (M>>1);
+    } else { // E Even M Large
+        a = S - 1 - (E>>1);
+        b = (1<<23) + T - (M>>1);
+    }
+
+    assert(a == (a & 0xff));
+    assert(b == (b & 0x7fffff));
+
+    // put new fields back in word
+    return (a << 23) | b;
+}
+
+void checkDiscrepancies() {
+    int i;
+    // test all positive floats
+    for (i = 0x00000001; i < 0x80000000; i++)
+        assert(G(i) == 0x5f3759df - (i >> 1));
+}
+</pre>
+</code>
+</p>
+
+<p>
+Now, we generalize this idea to work for any constant. First, the exponent is shown to be 190, and the mantissa of the constant minus our bit shifted number as the following:
+</p>
+
+
+<p>
+$$
+\begin{align}
+y(x) &= \left\{\begin{array}{lr}
+        1 +t - x/2 & E_0 = 0, &\quad x \leq 2t\\
+        1+t/2 - x/4, &  E_0 = 0, &\quad x > 2t\\
+        \sqrt{2}(3/4 + t/2 - x/4) & E_0 = 1\\
+        \end{array}\right\}\\
+\end{align}
+$$
+</p>
+
+<p>
+where x is the mantissa of our input and t is the mantissa of the constant for which we are searching. He then creates an expression of the relative error of each constant and shows that the mantissa
+of the optimal constant corresponds to the solution of:
+</p>
+
+<p>
+$$
+4t^6 + 36t^5 + 81t^4 - 216t^3 - 972t^2 - 2916t + 1458 = 0
+$$
+</p>
+
+<p>
+which gives
+</p>
+
+<p>
+$$
+\sigma = 0.4327448899594431954685215869960103736198
+$$
+</p>
+
+<p>
+corresponding to the value <code class = "prettyprint">0x5f37642f</code>, different than the Quake II code. However, this ignores the fact that we will be using Newton's method, which will perform better for an underestimate than the actual answer.
+The author derives a similar relation as above, but applied after the use of Newton's method, corresponding to 
+</p>
+
+<p>
+$$
+\sigma = 0.4324500847901426421787829374967964668614
+$$
+</p>
+
+<p>
+which gives the constant as <code class = "prettyprint">0x5f375a86</code>, for a maximum relative error of 0.0017512378. This is more accurate than the original, and the author continues by giving refinements for double and quadruple precision.
+</p>
+
+<p>
+Unfortunately, the exact method by which the constant used in Quake III was derived appears to be lost to time, though there appears to have been some trial and error paired with theory. Some discussion of its authorship can be found 
+<a href="https://www.beyond3d.com/content/articles/8/" target="blank">here</a> and <a href="https://www.beyond3d.com/content/articles/15/" target="blank">here</a>. 
+</p>

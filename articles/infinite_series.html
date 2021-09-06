@@ -1,0 +1,136 @@
+<p>
+In the last post I mentioned the <a href="https://en.wikipedia.org/wiki/Basel_problem" target="blank">Basel problem</a>, which is finding the 
+solution to the equation:
+
+$$ \sum _{n=1}^{\infty } \frac {1}{n^{2}} =\frac {1}{1^{2}} +
+                                           \frac {1}{2^{2}} +
+                                           \frac {1}{3^{2}} +
+                                           \cdots $$
+
+</p>
+
+<p>
+Before tackling this series with (several) purely mathematical approaches, I wanted to show how the programming language
+<a href="https://www.haskell.org/" target="blank">Haskell</a> can be used to approximate this series. One of the interesting things about
+Haskell is the way that it is able to handle infinite data structures. For instance, in Haskell, I can simply write
+[1..] to represent the positive integers $\mathbb{Z}^+ = \{1, 2, 3, \dots\}$ 
+</p>
+
+<p>
+This simplicity is driven by the fact that Haskell uses lazy evaluation, meaning that any expression, even the definition of a variable, is not evaluated until it is used. If the variable we assigned this list to were never called in the main of our program, it actually wouldn't be evaluated at all!
+</p>
+
+<p>
+Haskell also has the concept of treating functions as 
+<a href="https://developer.mozilla.org/en-US/docs/Glossary/First-class_Function" target="blank">first-class citizens</a>, meaning that 
+we can more easily make mathemaical abstrations by creating functions that themselves take functions as arguements.
+</p>
+
+<p>
+Let's think about how we can express the notion of a general infinite series in Haskell. At its core, an infinite series
+revolves around some series $\{a_i\}$. We'll restrict ourselves to the situation where we also have some function that takes our indices $i$ and gives us the terms of our series $f(i) = a_i$
+</p>
+
+<p>
+For instance, in the Basel problem we have the function $f(i) = \frac{1}{i^2}$ which gives the series:
+\begin{align} 
+\{1, 2, 3, \dots\} & \rightarrow  \{ f(1), f(2), f(3), \dots\}\\
+           & = \left\{\frac{1}{1^2}, \frac{1}{2^2}, \frac{1}{3^2}, \dots\right\}\\
+           & = \{a_1, a_2, a_3, \dots\} \\
+           & = \{a_i\}
+\end{align}
+
+</p>
+
+<p>
+Finally, the actual summation of the series is by definition:
+
+$$ \sum _{i=1}^{\infty }a_{i}=\lim _{n\to \infty }\sum _{i=1}^{n}a_{i} $$
+</p>
+
+<p>
+Written in this form, it becomes a little more obvious how we could write a function to represent a general infinite series.
+In Haskell, I would first declare the typing as follows:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+infin_series :: (Double -> Double) -> [Int] -> [Double]
+</pre>
+</code>
+</p>
+
+<p>
+Let's break down what these types represent:
+
+<p style="margin-left:5%; margin-right:10%;">
+(Double -> Double) is our function $f(i)$<br>
+[Int] is our list of indicies $\{a_i\}$<br>
+[Double] is our resulting series $\{f(i)\}$
+</p>
+
+</p>
+
+The full function itself is simple:
+
+<p>
+<code>
+<pre class = "prettyprint">
+infin_series :: (Double -> Double) -> [Int] -> [Double]
+infin_series func index = map (func . fromIntegral) index
+</pre>
+</code>
+</p>
+
+<p>
+We simply are taking the list of indices and mapping them using the provided function. Look at how clean this is! Note that this
+was possible because we were able to use a function as an argument. Also, note that at this point we have done nothing to
+limit ourselves to a finite set of indices. We've created something pretty general here.
+</p>
+
+<p>
+Now we can create another function that evaluates the basel problem to an arbitrary precision by taking a specified number
+of terms of returning their sum:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+basel :: Int -> Double
+basel sum_terms = sum $ 
+                  take sum_terms $
+                  infin_series (\n -> 1/(n**2)) [1..]
+
+</pre>
+</code>
+</p>
+
+
+
+<p>
+Here we have simply used our function infin_series and specified that we take a finite number of terms before we get the summation. 
+</p>
+
+<p>
+So if we call basel 10000, we will be given:
+
+$$ \frac{1}{1^2} + \frac{1}{2^2} +\frac{1}{3^2} + \dots +\frac{1}{10000^2} \approx 1.6448340718480652$$
+
+</p>
+
+<p>
+On my desktop, this takes just under two seconds. Is there a closed-form expression for this series? Shockingly, it
+can be shown that this series is equal to $\frac{\pi^2}{6}$. Where did $\pi$ come from and why is it squared?! 
+I'll give several explanations in a future post. 
+</p>
+
+<p>
+Beyond an analytic solution, however, we can see that Haskell has a remarkable ability to express mathematical concepts concisely. We were able to not only obtain an approximation for a particular series but construct a function to evaluate
+any arbitrary series that is a function of its indices. Why is this important beyond pure mathematics problems? This ability
+for abstraction allows us to create more readable code first of all, and also proves useful in designing code that takes advantage of structural similarities that many programming problems share, giving us an advantage in terms of both performance
+and the ability to write generalized code. 
+</p>
+<p>
+Code used in this article can be found <a href="https://github.com/chenson2018/website-code/tree/master/Infinite%20Series%20in%20Haskell" target="blank">here</a>.
+</p>

@@ -1,0 +1,350 @@
+<p>
+In this post, we'll take a look at how to approximate integrals in Haskell and Python. These methods are probably not the most efficient, and there already are existing implementations like
+<a href="https://docs.scipy.org/doc/scipy/reference/tutorial/integrate.html" target="blank">scipy.integrate</a> in Python or
+<a href="http://hackage.haskell.org/package/numeric-tools-0.2.0.1/docs/Numeric-Tools-Integration.html" target="blank">Numeric.Tools.Integration</a> in Haskell with a range of features and optimizations.
+The point of this post is to show a direct implementation of integration from definitions.
+</p>
+
+<div class='heading'>The Darboux Integral</div><hr/>
+<p>
+From introductory calculus you should have a familiarity with the Riemann integral. An equivlent formulation is the Darboux integral. Look at the below diagram:
+</p>
+
+<p>
+<a href="https://commons.wikimedia.org/wiki/File:Darboux.svg#/media/File:Darboux.svg">
+<img src="https://upload.wikimedia.org/wikipedia/commons/5/59/Darboux.svg" alt="Darboux.svg" height="177" width="425" style="background-color:white;">
+</a>
+</p>
+
+<p>
+We have divided our interval $[a, b]$ into the partition $P = \{x_i\}$ where $x_0 < x_1 < \dots < x_n$. 
+</p>
+
+<p>
+For each of these subintervals we will choose two values of our function:
+
+\begin{align}
+ M_i = \sup_{x\in[x_{i-1},x_{i}]} f(x)\\
+ m_i = \inf_{x\in[x_{i-1},x_{i}]} f(x)
+\end{align}
+
+</p>
+
+<p>
+which represent the upper and lower bounds of the function. We then can construct rectangles to approximate our (signed) area under the curve:
+
+\begin{align}
+U_{f, P} &= \sum_{i=1}^n (x_{i}-x_{i-1}) M_i\\
+L_{f, P} &= \sum_{i=1}^n (x_{i}-x_{i-1}) m_i 
+\end{align}
+
+which are the upper and lower estimates of the integral given a particular partition, as represented in the above diagram.
+</p>
+
+<p>
+From here, we have upper and lower integrals expressed in terms of the behavior of the upper and lower sums, but <i><b>across all partitions</b></i>:
+
+\begin{align}
+U_f &\equiv  \overline{\int_{a}^{b}} f(x) \, \mathrm{d}x = \inf\{U_{f,P} \colon P \text{ is a partition of } [a,b]\}\\
+L_f &\equiv \underline{\int_{a}^{b}} f(x) \, \mathrm{d}x = \sup\{L_{f,P} \colon P \text{ is a partition of } [a,b]\}
+\end{align}
+</p>
+
+and if both are equal, we say that $f$ is Darboux-integrable, denoted by the integral written without an underline or overline. A useful equivalent is that for all $\epsilon > 0$, there exists a partition $P_{\epsilon}$ such that:
+
+<p>
+$$
+U_{f, P} - L_{f, P} < \epsilon
+$$
+</p>
+
+<div class='heading'>Implementation in Python</div><hr/>
+
+<p>
+For our numerical approximations, I will be making the large assumption of using a partition with subintervals of equal size. For most integrals we encounter, this is sufficient, but note the statement of the epsilon version
+of the Darboux integral. It is possible to construct a function where the upper and lower sums fail to converge for even spaced partitions, but there is another partition that does converge. However, as long as we're working with "nice"
+functions, this will not occur. 
+</p>
+
+Here is my function:
+
+<p>
+<code>
+<pre class = "prettyprint linenums">
+import numpy as np
+
+def darboux(f, a, b, epsilon, precision, increment=1, n=1):
+    record = []
+    
+    while True:
+        upper_terms = []
+        lower_terms = []
+
+        partition = np.linspace(a, b, n+1)
+        delta = partition[1] - partition[0]
+
+        for i in range(len(partition)-1):
+            lower, upper = partition[i], partition[i+1]
+            
+            options = np.linspace(lower, upper, precision)
+            values = list(map(f, options))
+            
+            upper_terms.append(max(values)*delta)
+            lower_terms.append(min(values)*delta)
+
+        upper_sum = sum(upper_terms)
+        lower_sum = sum(lower_terms)
+
+        record.append((lower_sum, upper_sum, n))
+        
+        e = upper_sum - lower_sum
+        
+        if e < epsilon:
+            return record
+        else:
+            n+= increment
+</pre>
+</code>
+</p>
+
+<p>
+Let's walk through what is happening at each step. First, we have seven arguments:
+</p>
+
+<p style="margin-left:2%;">
+- $f$, our function to be integrated<br>
+- $a$ and $b$, our interval over which we are integrating<br>
+- epsilon, how close we want our upper and lower sums in the approximation<br>
+- precision, how many points to evaluate in each subinterval to pick $M_i$ and $m_i$<br>
+- n, how many subintervals to begin with<br>
+- increment, how much to increase the number of subintervals each loop
+</p>
+
+<p>
+And in the function we have the following steps:
+</p>
+
+<p style="margin-left:2%;">
+Line 4: initialize a list to store the tuple (upper_sum, lower_sum, n)<br>
+Line 6-7: initialize lists to store our summation terms for each partition<br>
+Line 10: divide the interval $[a,b]$ into a partition of $n$ subintervals of equal size<br>
+Line 11: store the subinterval width (written $x_i - x_{i-1}$ above)<br>
+Line 13: begin loop through each subinterval<br>
+Line 14-16: select points in the subinterval (number determined by precision)<br>
+Line 17-20: evaluate $f$ and store the min/max multiplied by our interval width (rectangle area)<br>
+Line 22-23: sum the area of our rectangles and store the resulting upper/lower summations<br>
+Line 27-32: if the upper and lower bounds are within epsilon break, otherwise increment n
+</p>
+
+<p>
+So for instance, if I call:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+d = darboux(lambda x: x**2, a=0, b=1, epsilon=.1, precision=5)
+
+for iteration in d: 
+    print(iteration)
+</pre>
+</code>
+</p>
+
+to approximate $\int_0^1 x^2 \, \mathrm{d}x = \frac{1}{3}$ the result is:
+
+<p>
+<code>
+<pre>
+(0.0, 1.0, 1)
+(0.125, 0.625, 2)
+(0.18518518518518517, 0.5185185185185185, 3)
+(0.21875, 0.46875, 4)
+(0.24000000000000005, 0.44000000000000006, 5)
+(0.2546296296296296, 0.4212962962962963, 6)
+(0.26530612244897955, 0.4081632653061224, 7)
+(0.2734375, 0.3984375, 8)
+(0.279835390946502, 0.3909465020576131, 9)
+(0.2850000000000001, 0.3850000000000001, 10)
+(0.2892561983471075, 0.3801652892561984, 11)
+</pre>
+</code>
+</p>
+
+<p>
+I can make epsilon smaller for more precise results, but the speed is very dependent upon appropriately setting our increment and epsilon to match the scale of our integral/precision.  
+</p>
+
+<p>
+Consider the approximation of $\int_3^{4.5} (x^2+2x) \, \mathrm{d}x = 32.625$:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+%%time
+d = darboux(lambda x: (x**2+2*x), 
+            a=3, b=4.5, 
+            epsilon=.1, 
+            precision=5, 
+            increment=1)
+
+print(d[-1])
+</pre>
+</code>
+</p>
+
+<p>
+<code>
+<pre>
+(32.575070693947964, 32.67495387151806, 214)
+Wall time: 595 ms
+</pre>
+</code>
+</p>
+
+compared with:
+
+<p>
+<code>
+<pre class = "prettyprint">
+%%time
+d = darboux(lambda x: (x**2+2*x), 
+            a=3, b=4.5, 
+            epsilon=.001, 
+            precision=5, 
+            increment=500)
+
+print(d[-1])
+</pre>
+</code>
+</p>
+
+<p>
+<code>
+<pre>
+(32.62450293126423, 32.625497071071685, 21501)
+Wall time: 11.6 s
+</pre>
+</code>
+</p>
+
+<p>
+Without adjusting the increment, the calculation would have taken much longer. Since I have stored each iteration, I can also graph the values and visualize the convergence of the upper and lower summations:
+</p>
+
+<p>
+<img border="0" alt="coprime plot" src="../static/article_files/integral/darboux.png" width="500">
+</p>
+
+<div class='heading'>Implementation in Haskell</div><hr/>
+
+<p>
+This problem also lends itself well to Haskell, with the added benefit that we don't have to manually allocate lists to store the values of our summations or use any loops.
+First I define two small helper functions, one to simulate np.linspace, and another a version of takeWhile that includes the boundary:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+linspace :: Double -> Double -> Int -> [Double]
+linspace a b n =
+   map (\ i -> a + (fromIntegral i) * inc) [(0::Int) .. (n - 1)]
+  where
+   inc = (b - a) / (fromIntegral (n - 1))
+</pre>
+</code>
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+takeWhileInclusive :: (a -> Bool) -> [a] -> [a]
+takeWhileInclusive _ [] = []
+takeWhileInclusive p (x:xs) = 
+  x : if p x then takeWhileInclusive p xs
+             else []
+</pre>
+</code>
+</p>
+
+<p>
+The actual function itself is nearly identical in concept:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+darboux :: (Double -> Double) -> Double -> Double -> Double -> Int -> Int -> [(Double, Double, Int)]
+darboux f a b epsilon precision increment = res 
+ where
+  n = map (\x-> increment*x) [1..]
+  
+  partitions = map (\n -> linspace a b (n+1)) n
+  delta = map (\xs -> (xs !! 1) - (xs !! 0)) partitions
+  
+  pairs = map (\xs -> zip xs (tail xs)) partitions
+  options = (map.map) (\(start, end) -> linspace start end precision) pairs
+  values  = (map.map.map) (\x -> f x) options
+  
+  upper = map sum $ (map.map) maximum values
+  lower = map sum $ (map.map) minimum values
+  
+  upper_sum = zipWith (*) upper delta
+  lower_sum = zipWith (*) lower delta
+  
+  s = zip3 lower_sum upper_sum n
+  res = takeWhileInclusive (\(low, high, n) -> (high - low) > epsilon) s
+</pre>
+</code>
+</p>
+
+Again estimating $\int_3^{4.5} (x^2+2x) \, \mathrm{d}x = 32.625$ with epsilon = .001 and an increment of 500:
+
+<p>
+<code>
+<pre class = "prettyprint">
+main = do
+    let test = darboux (\x -> x**2+2*x) 3 4.5 0.001 5 500
+    print (last test)
+</pre>
+</code>
+</p>
+
+<p>
+<code>
+<pre>
+(32.62450290825767,32.62549709430418,21500)
+</pre>
+</code>
+</p>
+
+<p>
+The output is nearly identical, except for n being one different due to my indexing. What is noticeably different is our performance. <code class = "prettyprint">Measure-Command</code> in Powershell gives the following:
+</p>
+
+<p>
+<code>
+<pre>
+Days              : 0
+Hours             : 0
+Minutes           : 0
+Seconds           : 4
+Milliseconds      : 891
+Ticks             : 48916287
+TotalDays         : 5.66160729166667E-05
+TotalHours        : 0.00135878575
+TotalMinutes      : 0.081527145
+TotalSeconds      : 4.8916287
+TotalMilliseconds : 4891.6287
+</pre>
+</code>
+</p>
+
+<p>
+showing that the Haskell implementation was over twice as fast for this particular integral. 
+</p>
+
+<p>
+Code used in this article can be found <a href="https://github.com/chenson2018/website-code/tree/master/Integration%20in%20Python%20and%20Haskell" target="blank">here</a>.
+</p>
