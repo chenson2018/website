@@ -4,6 +4,10 @@ import tornado.ioloop
 import tornado.web
 import os
 
+# home page of website
+# queries database to list all articles
+# credentials are stored in environment 
+
 class MainHandler(tornado.web.RequestHandler):
     def get(self):
         password = os.environ['website_mysql_password']
@@ -24,6 +28,9 @@ class MainHandler(tornado.web.RequestHandler):
 class AboutHandler(tornado.web.RequestHandler):
     def get(self):
         self.render("about.html")
+
+# handles subscribing, with conditional behavior depending
+# on if the method is a GET request or a POST request from the form
 
 class SubscribeHandler(tornado.web.RequestHandler):
     def get(self):
@@ -49,6 +56,9 @@ class SubscribeHandler(tornado.web.RequestHandler):
         except:
             raiseError(self, message = "Error subscribing. Most likely your email is already registered, otherwise please contact me.")
 
+# similiar to the above, but for unsubscribing
+# could be combined likely, but the templates would be a bit messy
+
 class unSubscribeHandler(tornado.web.RequestHandler):
     def get(self):
         self.render("unsubscribe.html", post = False)
@@ -72,6 +82,10 @@ class unSubscribeHandler(tornado.web.RequestHandler):
             self.render("unsubscribe.html", post = True)
         except:
             raiseError(self, message = "Error unsubscribing, please contact me to resolve.")
+
+# handler for individual articles
+# this accesses the database for the title
+# but then uses the local file for the actual html
 
 class ArticleHandler(tornado.web.RequestHandler):
     def get(self, filename):
@@ -102,6 +116,9 @@ class ArticleHandler(tornado.web.RequestHandler):
                 body = fh.read()
             self.render("article.html", heading = article['title'], body = body)
 
+
+# a small function to have error pages with styled formatting
+# this could be reworked into a proer class so that the status codes are representative
 
 def raiseError(self, message):
     self.clear()
