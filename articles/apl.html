@@ -1,0 +1,317 @@
+
+<p>
+For a while, I have wanted to learn the programming language <a href="https://en.wikipedia.org/wiki/APL_(programming_language)">APL</a>. I have a soft spot for unusual languages, especially when they have a unique take on the most basic ways that a programmer can approach a problem. I'm just a beginner with APL (I started this week!) but the core of APL's unique nature as I see it is that it takes arrays as its core data type. Along with a powerful set of built-in operations, this provides the programmer with a highly expressive set of tools that be used to very concisely  manipulate data.
+</p>
+
+<div class='heading'>Generating Calendars</div><hr/>
+
+<p>
+As I began learning the basics, I had a problem come into mind that I thought fit array programming pretty well. I have an affinity for any sort of problems that involve calendars, and thus this problem came to mind: "write an APL function that generates a calendar for any arbitrary year". It seems to fit pretty naturally since, at its core, a calendar is a three-dimensional array with some peculiar rules for its layout. 
+</p>
+
+<p>
+Let's look at <a href="https://www.timeanddate.com/calendar/?year=1799">a calendar from 1799</a> as a reference. Each month has seven columns, representing Sunday through Saturday, and six rows. Depending on the layout of the particular month, there will potentially be leading/trailing blanks, which I will represent with zeroes.
+</p>
+
+<p>
+My full code is available <a href="https://github.com/chenson2018/learning-apl/blob/main/calendar-stack.apl">here</a>, and the rest of this short article will be a brief explanation. Note that I am using <a href="https://www.dyalog.com/">Dyalog APL</a>.
+</p>
+
+<div class='heading'>Arrays, Glyphs, and Reshaping</div><hr/>
+
+<p>
+To start, I am going to encode some of this information into arrays. First I encode the dimensions of each month:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+c←6 7
+</pre>
+</code>
+</p>
+
+<p>
+I think this is a good time to introduce one of APL's most basic operators, $⍴$. First, one of the ideas of glyphs in APL is that some are overloaded depending on how they are called. Note that in APL we read from right to left. Suppose that I write $⍴c$, passing just one argument on the right. This is called using $⍴$ as a monadic function and will return 2, the shape of the array. If I instead call $c ⍴ 9$, this is called using $⍴$ as a dyadic function, so that it now means to reshape the right argument into an array with the shape provided on the left side, repeating elements as often as needed to fill space. 
+</p>
+
+<p>
+Let's see this in action. I also need an array that has the number of days in each month. To simplify some calculations later, I will be counting March as the first month of the year. I could just write this:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+d←31 30 31 30 31 31 30 31 30 31 31 28
+</pre>
+</code>
+</p>
+
+<p>
+However noting that a reshape will repeat elements, I can write this a bit more compactly. $5\,⍴\,31\,30$ will evaluate to 
+</p>
+
+<code>
+<pre class = "prettyprint">
+31 30 31 30 31
+</pre>
+</code>
+
+<p>
+We can repeat this by expanding to $10\,⍴5⍴31\,30$, and finally add the trailing January and February using the $,$ glyph to combine arrays:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+d←(10⍴5⍴31 30),(31 28)
+</pre>
+</code>
+</p>
+
+<div class='heading'>Calculating the Day of the Week</div><hr/>
+
+<p>
+So now for any given month, I can figure out how many days are in the middle of the calendar, but how do I find how many leading zeroes a particular month will have? Thankfully there is a <a href="https://en.wikipedia.org/wiki/Determination_of_the_day_of_the_week#Disparate_variation">closed-form formula</a> for calculating the day of the week given a month and year:
+</p>
+
+$$
+w = \left(d + \lfloor 2.6m - 0.2 \rfloor + y + \left\lfloor\frac{y}{4}\right\rfloor + \left\lfloor\frac{c}{4}\right\rfloor - 2c\right) \bmod 7
+$$
+
+where:
+
+<p style="margin-left:5%; margin-right:10%;">
+- Y is the year minus 1 for January or February, and the year for any other month<br>
+- y is the last 2 digits of Y<br>
+- c is the first 2 digits of Y<br>
+- d is the day of the month (1 to 31)<br>
+- m is the shifted month (March=1,…,February=12)<br>
+- w is the day of week (0=Sunday,…,6=Saturday).
+</p>
+
+For my purposes, I just want to know the first day of the week for a given month/year, so I can simplify the formula a bit by using $d=1$:
+
+<p>
+<code>
+<pre class = "prettyprint">
+z←{
+  Y←⍵-⍺>10⋄
+  y←100|Y⋄
+  c←(Y-y)÷100⋄
+  7|1+⌊((2.6×⍺)-0.2)+y+⌊(y÷4)+⌊(c÷4)-2×c
+}
+</pre>
+</code>
+</p>
+
+<p>
+A couple of things to note:
+</p>
+
+<p style="margin-left:5%; margin-right:10%;">
+- the braces indicate that this is a function<br>
+- this function is dyadic, meaning it takes a left and right argument<br>
+- ⍺ (month) and ⍵ (year) are the left and right arguments<br>
+- | is the modulus operator in APL<br>
+- ⋄ is used to separate statements (only needed if writing on one line)<br>
+- the return value is the last line, the first statement not assigning a value
+</p>
+
+<div class='heading'>Creating a Month</div><hr/>
+
+We're nearing the home stretch! Now we use the following to create a month:
+
+<p>
+<code>
+<pre class = "prettyprint">
+m←{c⍴(⍺⍴0),(⍳⍵),((×/c-⍺+⍵)⍴0)}
+</pre>
+</code>
+</p>
+
+A few notes:
+
+<p style="margin-left:5%; margin-right:10%;">
+- ⍺ (leading zeroes) and ⍵ (days in the month) are the left and right arguments<br>
+- $c$ is the array $(6\,7)$ we defined earlier as the shape of a month<br>
+- ×/c multiplies the entries in $c$<br>
+- ⍳⍵ gives the array $1\,\,2 \dots ⍵$<br>
+</p>
+
+<p>
+The function m creates a month given the number of trailing zeroes and the number of days in the month. So altogether we construct the array $0\dots1\,\,2\,\,3\,\,\dots⍵\,\,0...$ and reshape into two dimensions. For instance, $5\,m\,32$ (an impossible month) would output:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+      5 m 32
+┌→───────────────────┐
+↓ 0  0  0  0  0  1  2│
+│ 3  4  5  6  7  8  9│
+│10 11 12 13 14 15 16│
+│17 18 19 20 21 22 23│
+│24 25 26 27 28 29 30│
+│31 32  0  0  0  0  0│
+└~───────────────────┘
+</pre>
+</code>
+</p>
+
+Now a similar function that takes a month and year:
+
+<p>
+<code>
+<pre class = "prettyprint">
+r←{(⍺ z ⍵) m (⍺⌷d)+((0≠100|⍵)∨(0=400|⍵))∧(0=4|⍵)∧(⍺=12)}           
+</pre>
+</code>
+</p>
+
+<p>
+With r, we pass a month and year and use previously defined functions and arrays to find the number of leading zeroes and days in the month. The only new glyph here is ⌷, which is used to access an index of an array, in this case the number of days in a given month (plus one if February during a leap year). 
+</p>
+
+<p>
+For example, January 1799 (remember how we encoded the months as March-February) is given by $11\,r\,1799$:
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+      11 r 1799
+┌→───────────────────┐
+↓ 0  0  1  2  3  4  5│
+│ 6  7  8  9 10 11 12│
+│13 14 15 16 17 18 19│
+│20 21 22 23 24 25 26│
+│27 28 29 30 31  0  0│
+│ 0  0  0  0  0  0  0│
+└~───────────────────┘
+</pre>
+</code>
+</p>
+
+Finally, we put all of this together to generate an entire year. <p>
+<code>
+<pre class = "prettyprint">
+y←{((11 12),⍳10)r¨⍵}
+</pre>
+</code>
+</p>
+
+<p>
+Here the argument is the year we want to see. We construct the array of months (moving 11/12 to the beginning for January/February), then use ¨ to map these using the function for creating a month. 
+</p>
+
+<p>
+Another example (changing dimension with ↑ for readability):
+</p>
+
+<p>
+<code>
+<pre class = "prettyprint">
+t←y 1799
+↑t
+
+┌┌→───────────────────┐
+↓↓ 0  0  1  2  3  4  5│
+││ 6  7  8  9 10 11 12│
+││13 14 15 16 17 18 19│
+││20 21 22 23 24 25 26│
+││27 28 29 30 31  0  0│
+││ 0  0  0  0  0  0  0│
+││                    │
+││ 0  0  0  0  0  1  2│
+││ 3  4  5  6  7  8  9│
+││10 11 12 13 14 15 16│
+││17 18 19 20 21 22 23│
+││24 25 26 27 28  0  0│
+││ 0  0  0  0  0  0  0│
+││                    │
+││ 0  0  0  0  0  1  2│
+││ 3  4  5  6  7  8  9│
+││10 11 12 13 14 15 16│
+││17 18 19 20 21 22 23│
+││24 25 26 27 28 29 30│
+││31  0  0  0  0  0  0│
+││                    │
+││ 0  1  2  3  4  5  6│
+││ 7  8  9 10 11 12 13│
+││14 15 16 17 18 19 20│
+││21 22 23 24 25 26 27│
+││28 29 30  0  0  0  0│
+││ 0  0  0  0  0  0  0│
+││                    │
+││ 0  0  0  1  2  3  4│
+││ 5  6  7  8  9 10 11│
+││12 13 14 15 16 17 18│
+││19 20 21 22 23 24 25│
+││26 27 28 29 30 31  0│
+││ 0  0  0  0  0  0  0│
+││                    │
+││ 0  0  0  0  0  0  1│
+││ 2  3  4  5  6  7  8│
+││ 9 10 11 12 13 14 15│
+││16 17 18 19 20 21 22│
+││23 24 25 26 27 28 29│
+││30  0  0  0  0  0  0│
+││                    │
+││ 0  1  2  3  4  5  6│
+││ 7  8  9 10 11 12 13│
+││14 15 16 17 18 19 20│
+││21 22 23 24 25 26 27│
+││28 29 30 31  0  0  0│
+││ 0  0  0  0  0  0  0│
+││                    │
+││ 0  0  0  0  1  2  3│
+││ 4  5  6  7  8  9 10│
+││11 12 13 14 15 16 17│
+││18 19 20 21 22 23 24│
+││25 26 27 28 29 30 31│
+││ 0  0  0  0  0  0  0│
+││                    │
+││ 1  2  3  4  5  6  7│
+││ 8  9 10 11 12 13 14│
+││15 16 17 18 19 20 21│
+││22 23 24 25 26 27 28│
+││29 30  0  0  0  0  0│
+││ 0  0  0  0  0  0  0│
+││                    │
+││ 0  0  1  2  3  4  5│
+││ 6  7  8  9 10 11 12│
+││13 14 15 16 17 18 19│
+││20 21 22 23 24 25 26│
+││27 28 29 30 31  0  0│
+││ 0  0  0  0  0  0  0│
+││                    │
+││ 0  0  0  0  0  1  2│
+││ 3  4  5  6  7  8  9│
+││10 11 12 13 14 15 16│
+││17 18 19 20 21 22 23│
+││24 25 26 27 28 29 30│
+││ 0  0  0  0  0  0  0│
+││                    │
+││ 1  2  3  4  5  6  7│
+││ 8  9 10 11 12 13 14│
+││15 16 17 18 19 20 21│
+││22 23 24 25 26 27 28│
+││29 30 31  0  0  0  0│
+││ 0  0  0  0  0  0  0│
+└└~───────────────────┘
+</pre>
+</code>
+</p>
+
+<div class='heading'>Next Steps</div><hr/>
+
+<p>
+This is just a small example of the power of APL, written by a beginner with a shallow knowledge of the language. I'm pretty confident that someone with more experience could have achieved the same result with even more compact code, and I look forward to learning enough APL to write at that level. 
+</p>
+
+<p>
+I highly encourage anyone interested to start by reading <a href="https://xpqz.github.io/learnapl/intro.html">Learning APL</a>, which has been a huge help. Getting started was much easier than I expected, and I recommend jumping into problems from <a href="https://adventofcode.com/2021/about">Advent of Code</a>, <a href="https://projecteuler.net/">Project Euler</a>, or the <a href="https://www.dyalog.com/student-competition.htm">APL Problem Solving Competition</a> as a way to pick up the basics.
+</p>
+
+
